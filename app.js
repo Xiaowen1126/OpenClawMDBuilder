@@ -667,6 +667,22 @@ function renderValidationPrompts(cfg) {
 }
 function render() {
   if (hasWorkspaceMode()) {
+    const editingWorkspaceText =
+      document.activeElement === n.quickEditor ||
+      document.activeElement === n.manualEditor;
+    if (!editingWorkspaceText) {
+      try {
+        const cfg = buildConfig();
+        const generated = bundle(cfg);
+        for (const f of FILE_ORDER) {
+          if (state.workspaceFiles.includes(f)) {
+            state.workspaceDocs[f] = generated[f];
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
     renderTabs();
     syncWorkspaceEditors();
     return;
