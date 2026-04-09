@@ -104,6 +104,30 @@ npm start
 
 默认地址：`http://127.0.0.1:8787`
 
+## 线上一键安装（多平台）
+
+### Linux / macOS
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Xiaowen1126/OpenClawMDBuilder/main/install-online.sh | bash
+```
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/Xiaowen1126/OpenClawMDBuilder/main/install-online.ps1 | iex
+```
+
+可选参数（环境变量或脚本参数）：
+
+```bash
+REPO_URL=https://github.com/Xiaowen1126/OpenClawMDBuilder.git BRANCH=main INSTALL_DIR=/opt/OpenClawMDBuilder APP_PORT=8787 OPENCLAW_WORKSPACE=/root/.openclaw/workspace bash install-online.sh
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install-online.ps1 -RepoUrl https://github.com/Xiaowen1126/OpenClawMDBuilder.git -Branch main -InstallDir "$env:USERPROFILE\OpenClawMDBuilder" -Port 8787
+```
+
 ## Linux 一键部署
 
 ```bash
