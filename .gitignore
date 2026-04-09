@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build/package outputs
+dist/
+*.tgz
+*.tar.gz
+*.zip
+
+# Runtime/temp files
+*.log
+*.pid
+*.seed
+*.tmp
+*.temp
+server.err
+server.out
+
+# Local scratch/import directories
+_tmp_import/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.*
+!.env.example

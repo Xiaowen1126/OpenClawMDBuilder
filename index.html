@@ -1,0 +1,199 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenClaw MD Builder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="badge">OpenClaw Workspace Compiler</span>
+      <h1 id="titleText">OpenClaw MD Builder</h1>
+      <p id="subtitleText">把人类意图编译成标准 Agent 配置包</p>
+    </div>
+    <div class="topbar-actions">
+      <input id="backupNameInput" type="text" placeholder="备份名（默认时间）" />
+      <button id="backupNowBtn" type="button">立即备份</button>
+      <select id="backupVersionSelect" aria-label="Backup Versions"></select>
+      <button id="refreshBackupsBtn" type="button">刷新版本</button>
+      <button id="restoreBackupBtn" type="button">恢复备份</button>
+      <button id="restartGatewayBtn" type="button" class="danger-btn">重启网关</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel form-panel">
+      <div class="section-title">
+        <h2 id="configPanelTitle">快捷修改</h2>
+        <span>Workspace Quick Edit</span>
+      </div>
+      <div class="group">
+        <label for="quickEditorFileName">当前文件</label>
+        <input id="quickEditorFileName" type="text" readonly />
+        <label for="quickEditor">左侧快捷编辑</label>
+        <textarea id="quickEditor" rows="12" placeholder="选择右侧上方文件标签后，在这里快速修改..."></textarea>
+        <button id="quickSaveBtn" type="button" class="primary">保存当前文件</button>
+      </div>
+
+      <div class="stage">
+        <div class="stage-head"><span>Step 1</span><strong>模板</strong></div>
+        <div class="group">
+          <h3><span>PRESETS</span> 模板库</h3>
+          <label id="presetCategoryLabel" for="presetCategorySelect">预设大类</label>
+          <select id="presetCategorySelect"></select>
+          <label id="presetLabel" for="presetSelect">细分类型</label>
+          <select id="presetSelect"></select>
+          <p id="presetDesc" class="hint"></p>
+          <a id="presetSourceLink" class="hint-link" href="#" target="_blank" rel="noreferrer noopener">查看来源</a>
+          <button id="applyPresetBtn" type="button">应用该模板</button>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-head"><span>Step 2</span><strong>人格</strong></div>
+        <div class="group">
+          <h3 id="soulGroupTitle"><span>SOUL</span> 人格配置</h3>
+          <label id="personalityLabel">性格（可多选）</label>
+          <div class="chips" id="personalityGroup"></div>
+        <details class="more-box">
+          <summary>更多人格选项</summary>
+          <input id="personalityExtraSearch" type="text" placeholder="搜索人格选项..." />
+          <div class="option-list" id="personalityExtraGroup"></div>
+        </details>
+
+          <label id="toneLabel" for="toneSelect">语气</label>
+          <select id="toneSelect"></select>
+
+          <div class="inline-switches">
+            <label><input id="humorInput" type="checkbox" checked />适度幽默</label>
+            <label><input id="strictInput" type="checkbox" checked />严格执行</label>
+          </div>
+
+          <label for="customPersonalityInput">自定义人格标签（逗号分隔）</label>
+          <input id="customPersonalityInput" type="text" placeholder="例：审稿人, 架构师, 产品思维" />
+
+          <label for="soulExtraInput">额外人格指令（每行一条）</label>
+          <textarea id="soulExtraInput" rows="3" placeholder="例：优先用中文输出&#10;当需求模糊时先澄清"></textarea>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-head"><span>Step 3</span><strong>能力</strong></div>
+        <div class="group">
+          <h3 id="agentsGroupTitle"><span>AGENTS</span> 能力配置</h3>
+          <label id="skillsLabel">技能</label>
+          <div class="chips" id="skillsGroup"></div>
+        <details class="more-box">
+          <summary>更多技能选项</summary>
+          <input id="skillsExtraSearch" type="text" placeholder="搜索技能选项..." />
+          <div class="option-list" id="skillsExtraGroup"></div>
+        </details>
+
+          <label id="rulesLabel">行为规则</label>
+          <div class="chips" id="rulesGroup"></div>
+        <details class="more-box">
+          <summary>更多规则选项</summary>
+          <input id="rulesExtraSearch" type="text" placeholder="搜索规则选项..." />
+          <div class="option-list" id="rulesExtraGroup"></div>
+        </details>
+
+          <label for="customSkillsInput">自定义技能（每行一条）</label>
+          <textarea id="customSkillsInput" rows="3" placeholder="例：Kubernetes cluster debugging"></textarea>
+
+          <label for="customRulesInput">自定义规则（每行一条）</label>
+          <textarea id="customRulesInput" rows="3" placeholder="例：先给结论，再给细节"></textarea>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-head"><span>Step 4</span><strong>工具</strong></div>
+        <div class="group">
+          <h3 id="toolsGroupTitle"><span>TOOLS</span> 工具配置</h3>
+          <div class="inline-switches" id="toolCoreGroup"></div>
+          <label id="toolSuggestLabel">类型推荐工具（可多选）</label>
+          <div class="chips" id="toolSuggestGroup"></div>
+        <details class="more-box">
+          <summary>更多推荐工具</summary>
+          <input id="toolSuggestExtraSearch" type="text" placeholder="搜索推荐工具..." />
+          <div class="option-list" id="toolSuggestExtraGroup"></div>
+        </details>
+          <label for="customToolsInput">自定义工具（每行一条）</label>
+          <textarea id="customToolsInput" rows="3" placeholder="例：Docker API: enabled&#10;Vector DB: disabled"></textarea>
+          <p class="hint">格式：`工具名: enabled/disabled`，不写状态默认 `enabled`。</p>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-head"><span>Step 5</span><strong>身份</strong></div>
+        <div class="group">
+          <h3><span>IDENTITY</span> 身份配置</h3>
+          <label for="identityName">名称</label>
+          <input id="identityName" type="text" value="DevOps助手" />
+
+          <label for="identityRole">角色</label>
+          <input id="identityRole" type="text" value="Linux运维专家" />
+
+          <label for="identityDesc">描述</label>
+          <textarea id="identityDesc" rows="3">A highly skilled engineer specialized in system debugging.</textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel preview-panel">
+      <div class="section-title">
+        <h2>已选汇总</h2>
+        <span>Selection Summary</span>
+      </div>
+
+      <div class="summary-grid">
+        <div class="selected-box"><div class="selected-title">已选人格</div><div class="chips selected-chips" id="personalitySelected"></div></div>
+        <div class="selected-box"><div class="selected-title">已选技能</div><div class="chips selected-chips" id="skillsSelected"></div></div>
+        <div class="selected-box"><div class="selected-title">已选规则</div><div class="chips selected-chips" id="rulesSelected"></div></div>
+        <div class="selected-box"><div class="selected-title">已选推荐工具</div><div class="chips selected-chips" id="toolSuggestSelected"></div></div>
+      </div>
+
+      <div class="section-title preview-head">
+        <h2>验证提示词</h2>
+        <span>Validation Prompts</span>
+      </div>
+      <div class="test-box">
+        <div class="test-actions">
+          <button id="copyAllPromptsBtn" type="button">复制全部提示词</button>
+        </div>
+        <div id="testPromptList"></div>
+      </div>
+
+      <div class="section-title preview-head">
+        <h2>手动编辑</h2>
+        <span>Workspace Manual Edit</span>
+      </div>
+      <p id="statusText" class="status"></p>
+      <div class="tabs" id="tabGroup"></div>
+      <textarea id="manualEditor" class="manual-editor" rows="20" placeholder="右侧手动编辑区域"></textarea>
+      <div class="test-actions">
+        <button id="manualSaveBtn" type="button" class="primary">保存当前文件</button>
+      </div>
+      <pre id="previewOutput" class="preview"></pre>
+    </section>
+  </main>
+
+  <div id="confirmModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="modal-card">
+      <h3 id="confirmTitle">二次确认</h3>
+      <p id="confirmMessage">确认执行此操作？</p>
+      <div class="modal-actions">
+        <button id="confirmCancelBtn" type="button">取消</button>
+        <button id="confirmOkBtn" type="button" class="primary">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
