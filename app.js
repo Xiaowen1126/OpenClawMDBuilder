@@ -54,6 +54,7 @@ const state = {
   workspaceFiles: [],
   workspaceDocs: {},
   backupPromptedForEdit: false,
+  pendingFormSync: false,
 };
 
 const n = {
@@ -69,7 +70,7 @@ const n = {
   testPromptList: id("testPromptList"), copyAllPromptsBtn: id("copyAllPromptsBtn"),
   category: id("presetCategorySelect"), preset: id("presetSelect"), presetDesc: id("presetDesc"), presetSource: id("presetSourceLink"),
   applyPreset: id("applyPresetBtn"), exportZip: id("exportZipBtn"), exportJson: id("exportJsonBtn"), importBtn: id("importBtn"), importFile: id("importFileInput"),
-  backupNowBtn: id("backupNowBtn"), backupVersionSelect: id("backupVersionSelect"), refreshBackupsBtn: id("refreshBackupsBtn"), restoreBackupBtn: id("restoreBackupBtn"), restartGatewayBtn: id("restartGatewayBtn"),
+  backupNowBtn: id("backupNowBtn"), backupVersionSelect: id("backupVersionSelect"), refreshBackupsBtn: id("refreshBackupsBtn"), restoreBackupBtn: id("restoreBackupBtn"), deleteBackupBtn: id("deleteBackupBtn"), restartGatewayBtn: id("restartGatewayBtn"),
   backupNameInput: id("backupNameInput"),
   quickEditor: id("quickEditor"), quickEditorFileName: id("quickEditorFileName"), quickSaveBtn: id("quickSaveBtn"),
   manualEditor: id("manualEditor"), manualSaveBtn: id("manualSaveBtn"),
@@ -403,6 +404,22 @@ async function restoreSelectedBackup() {
     setStatus(`restore failed: ${String(err.message || err)}`);
   }
 }
+async function deleteSelectedBackup() {
+  const id0 = n.backupVersionSelect?.value;
+  if (!id0) {
+    setStatus("no backup selected");
+    return;
+  }
+  const ok = await showConfirm(`\u786e\u8ba4\u5220\u9664\u5907\u4efd ${id0}\uff1f\u6b64\u64cd\u4f5c\u4e0d\u53ef\u64a4\u9500\u3002`);
+  if (!ok) return;
+  try {
+    await apiFetchJson(`/api/workspace/backups/${encodeURIComponent(id0)}`, { method: "DELETE" });
+    setStatus(`backup deleted: ${id0}`);
+    await refreshBackupVersions();
+  } catch (err) {
+    setStatus(`delete backup failed: ${String(err.message || err)}`);
+  }
+}
 async function restartGateway() {
   const ok = await showConfirm("\u786e\u8ba4\u73b0\u5728\u91cd\u542f OpenClaw \u7f51\u5173\uff1f");
   if (!ok) return;
@@ -428,6 +445,7 @@ function applyStaticText() {
   if (n.backupNowBtn) n.backupNowBtn.textContent = "\u7acb\u5373\u5907\u4efd";
   if (n.refreshBackupsBtn) n.refreshBackupsBtn.textContent = "\u5237\u65b0\u7248\u672c";
   if (n.restoreBackupBtn) n.restoreBackupBtn.textContent = "\u6062\u590d\u5907\u4efd";
+  if (n.deleteBackupBtn) n.deleteBackupBtn.textContent = "\u5220\u9664\u5907\u4efd";
   if (n.restartGatewayBtn) n.restartGatewayBtn.textContent = "\u91cd\u542f\u7f51\u5173";
   if (n.confirmCancelBtn) n.confirmCancelBtn.textContent = "\u53d6\u6d88";
   if (n.confirmOkBtn) n.confirmOkBtn.textContent = "\u786e\u8ba4";
@@ -667,6 +685,22 @@ function renderValidationPrompts(cfg) {
 }
 function render() {
   if (hasWorkspaceMode()) {
+    const editingWorkspaceText =
+      document.activeElement === n.quickEditor ||
+      document.activeElement === n.manualEditor;
+    if (!editingWorkspaceText && state.pendingFormSync) {
+      try {
+        const cfg = buildConfig();
+        for (const f of FILE_ORDER) {
+          if (state.workspaceFiles.includes(f)) {
+            state.workspaceDocs[f] = mergeWorkspaceFile(f, state.workspaceDocs[f] || "", cfg);
+          }
+        }
+        state.pendingFormSync = false;
+      } catch (err) {
+        console.error(err);
+      }
+    }
     renderTabs();
     syncWorkspaceEditors();
     return;
@@ -720,6 +754,109 @@ function headingBlock(content, headingLevel, headingText) {
 }
 function section(content, h1) { return headingBlock(content, 1, h1); }
 function sectionH2(content, h2) { return headingBlock(content, 2, h2); }
+function splitLines(s) { return String(s || "").replace(/\r\n/g, "\n").split("\n"); }
+function joinLines(lines0) { return lines0.join("\n"); }
+function findHeading(lines0, level, title) {
+  const target = `${"#".repeat(level)} ${String(title || "").trim()}`.toLowerCase();
+  for (let i = 0; i < lines0.length; i++) {
+    if (lines0[i].trim().toLowerCase() === target) return i;
+  }
+  return -1;
+}
+function nextHeadingIndex(lines0, start, level) {
+  const h = "#".repeat(level);
+  const h1 = "# ";
+  for (let i = start + 1; i < lines0.length; i++) {
+    const t = lines0[i].trim();
+    if (t.startsWith(h1)) return i;
+    if (level === 2 && t.startsWith("## ")) return i;
+    if (level === 1 && t.startsWith(h)) return i;
+  }
+  return lines0.length;
+}
+function replaceOrAppendSection(content, level, title, bodyLines) {
+  const lines0 = splitLines(content);
+  const start = findHeading(lines0, level, title);
+  const block = [`${"#".repeat(level)} ${title}`, ...bodyLines];
+  if (start < 0) {
+    const out = [...lines0];
+    if (out.length && out[out.length - 1].trim() !== "") out.push("");
+    out.push(...block);
+    return joinLines(out);
+  }
+  const end = nextHeadingIndex(lines0, start, level);
+  const out = [...lines0.slice(0, start), ...block, ...lines0.slice(end)];
+  return joinLines(out);
+}
+function replaceFirstMatch(content, regex, replacement) {
+  if (!regex.test(content)) return content;
+  regex.lastIndex = 0;
+  return content.replace(regex, replacement);
+}
+function mergeSoulMd(base, cfg) {
+  let out = String(base || "");
+  const personality = cfg.soul.personality.length ? cfg.soul.personality.join(", ") : "steady";
+  if (/^You are .*$/m.test(out)) {
+    out = out.replace(/^You are .*$/m, `You are a ${personality} style AI assistant.`);
+  } else {
+    out = replaceOrAppendSection(out, 1, "Personality", ["", `You are a ${personality} style AI assistant.`, ""]);
+  }
+
+  const toneBody = ["", `- ${cfg.soul.tone}`, "- Avoid fluff", ""];
+  out = replaceOrAppendSection(out, 2, "Tone", toneBody);
+
+  const behaviorBody = ["", "- Clear opinions", "- Direct answers", cfg.soul.strict ? "- Follow constraints strictly" : "- Stay flexible within constraints", ""];
+  out = replaceOrAppendSection(out, 2, "Behavior", behaviorBody);
+
+  const styleBody = ["", cfg.soul.humor ? "- Use light humor when useful" : "- Keep humor off", ""];
+  out = replaceOrAppendSection(out, 2, "Style", styleBody);
+
+  return out;
+}
+function mergeAgentsMd(base, cfg) {
+  let out = String(base || "");
+  const caps = cfg.agent.skills.length ? cfg.agent.skills.map((x) => `- ${SKILL_LABEL_MAP[x] || x}`) : ["- General task assistance"];
+  out = replaceOrAppendSection(out, 1, "Capabilities", ["", ...caps, ""]);
+
+  const rules = cfg.agent.rules.length ? cfg.agent.rules.map((x) => `- ${x}`) : ["- Follow user instructions clearly"];
+  out = replaceOrAppendSection(out, 1, "Rules", ["", ...rules, ""]);
+
+  const startupIdx = findHeading(splitLines(out), 1, "Startup");
+  if (startupIdx < 0) {
+    out = replaceOrAppendSection(out, 1, "Startup", ["", "On each session:", "1. Read SOUL.md", "2. Load MEMORY.md", ""]);
+  }
+  return out;
+}
+function mergeToolsMd(base, cfg) {
+  const customLines = (cfg.tools.custom || []).map((x) => `- ${x.name} ${x.enabled ? "enabled" : "disabled"}`);
+  const body = [
+    "",
+    `- Shell access ${cfg.tools.shell ? "enabled" : "disabled"}`,
+    `- SSH ${cfg.tools.ssh ? "enabled" : "disabled"}`,
+    `- UDP monitoring ${cfg.tools.udp ? "enabled" : "disabled"}`,
+    ...customLines,
+    "",
+  ];
+  return replaceOrAppendSection(String(base || ""), 1, "Tools", body);
+}
+function mergeIdentityMd(base, cfg) {
+  let out = String(base || "");
+  if (/^Name:\s*.*$/m.test(out)) out = out.replace(/^Name:\s*.*$/m, `Name: ${cfg.identity.name}`);
+  else out = replaceOrAppendSection(out, 1, "Identity", ["", `Name: ${cfg.identity.name}`, `Role: ${cfg.identity.role}`, "", "Description:", cfg.identity.description, ""]);
+
+  if (/^Role:\s*.*$/m.test(out)) out = out.replace(/^Role:\s*.*$/m, `Role: ${cfg.identity.role}`);
+  if (/Description:\s*\n[\s\S]*?(?=\n#|$)/m.test(out)) {
+    out = out.replace(/Description:\s*\n[\s\S]*?(?=\n#|$)/m, `Description:\n${cfg.identity.description}`);
+  }
+  return out;
+}
+function mergeWorkspaceFile(file, base, cfg) {
+  if (file === "SOUL.md") return mergeSoulMd(base, cfg);
+  if (file === "AGENTS.md") return mergeAgentsMd(base, cfg);
+  if (file === "TOOLS.md") return mergeToolsMd(base, cfg);
+  if (file === "IDENTITY.md") return mergeIdentityMd(base, cfg);
+  return String(base || "");
+}
 function parseSoulMd(content) {
   const s = { personality: [], extraDirectives: [] };
 
@@ -879,6 +1016,7 @@ async function syncFromWorkspace(statusPrefix = "workspace loaded") {
   const names = Object.keys(md).sort((a, b) => a.localeCompare(b, "en"));
   state.workspaceFiles = names;
   state.workspaceDocs = { ...md };
+  state.pendingFormSync = false;
   if (!names.length) {
     setStatus(`${statusPrefix} | no md files found`);
     render();
@@ -909,8 +1047,30 @@ function initCatalog(raw) { state.catalog = normalizeCatalog(raw); n.category.in
 async function loadCatalog() { const resp = await fetch(`./data/preset-catalog.json?v=${Date.now()}`, { cache: "no-store" }); if (!resp.ok) throw new Error(`catalog ${resp.status}`); return JSON.parse((await resp.text()).replace(/^\uFEFF/, "")); }
 
 function bind() {
-  document.addEventListener("input", (e) => { if (e.target && e.target.matches("input, select, textarea")) render(); });
-  document.addEventListener("change", (e) => { if (e.target && e.target.matches("input, select, textarea")) render(); });
+  const formSyncIds = new Set([
+    "toneSelect", "humorInput", "strictInput",
+    "customPersonalityInput", "soulExtraInput",
+    "customSkillsInput", "customRulesInput", "customToolsInput",
+    "identityName", "identityRole", "identityDesc",
+  ]);
+  const formSyncNames = new Set(["personality", "skills", "rules", "toolSuggest", "coreTools"]);
+  const shouldSyncFormToWorkspace = (target) => {
+    if (!target || !target.matches || !target.matches("input, select, textarea")) return false;
+    if (target === n.quickEditor || target === n.manualEditor) return false;
+    if (target === n.backupNameInput || target === n.backupVersionSelect) return false;
+    if (formSyncIds.has(target.id || "")) return true;
+    if (formSyncNames.has(target.name || "")) return true;
+    return false;
+  };
+
+  document.addEventListener("input", (e) => {
+    if (shouldSyncFormToWorkspace(e.target)) state.pendingFormSync = true;
+    if (e.target && e.target.matches("input, select, textarea")) render();
+  });
+  document.addEventListener("change", (e) => {
+    if (shouldSyncFormToWorkspace(e.target)) state.pendingFormSync = true;
+    if (e.target && e.target.matches("input, select, textarea")) render();
+  });
   if (n.exportZip) n.exportZip.onclick = exportZip;
   if (n.exportJson) n.exportJson.onclick = exportJson;
   if (n.importBtn && n.importFile) {
@@ -920,6 +1080,7 @@ function bind() {
   if (n.backupNowBtn) n.backupNowBtn.onclick = createBackupNow;
   if (n.refreshBackupsBtn) n.refreshBackupsBtn.onclick = refreshBackupVersions;
   if (n.restoreBackupBtn) n.restoreBackupBtn.onclick = restoreSelectedBackup;
+  if (n.deleteBackupBtn) n.deleteBackupBtn.onclick = deleteSelectedBackup;
   if (n.restartGatewayBtn) n.restartGatewayBtn.onclick = restartGateway;
   if (n.category) n.category.onchange = renderPresetList;
   if (n.preset) n.preset.onchange = renderPresetDetails;
@@ -927,14 +1088,12 @@ function bind() {
   n.skillsSearch?.addEventListener("input", () => renderExtra("skills"));
   n.rulesSearch?.addEventListener("input", () => renderExtra("rules"));
   n.toolSuggestSearch?.addEventListener("input", () => renderExtra("toolSuggest"));
-  if (n.applyPreset) n.applyPreset.onclick = () => { const p = selPreset(); if (!p?.config) return; applyConfig(p.config); render(); setStatus(t("presetApplied", { name: presetLabel(p) })); };
+  if (n.applyPreset) n.applyPreset.onclick = () => { const p = selPreset(); if (!p?.config) return; applyConfig(p.config); state.pendingFormSync = true; render(); setStatus(t("presetApplied", { name: presetLabel(p) })); };
 
   if (n.quickEditor) {
-    n.quickEditor.addEventListener("focus", () => { promptBackupBeforeEdit(); });
     n.quickEditor.addEventListener("input", () => updateWorkspaceContent("quick"));
   }
   if (n.manualEditor) {
-    n.manualEditor.addEventListener("focus", () => { promptBackupBeforeEdit(); });
     n.manualEditor.addEventListener("input", () => updateWorkspaceContent("manual"));
   }
   if (n.quickSaveBtn) n.quickSaveBtn.onclick = saveActiveWorkspaceFile;

@@ -175,6 +175,17 @@ start_without_systemd() {
   local new_pid
   new_pid="$(cat "$PID_FILE" 2>/dev/null || true)"
   if [ -z "${new_pid:-}" ] || ! kill -0 "$new_pid" >/dev/null 2>&1; then
+    log "nohup start failed. Last log lines:"
+    if [ -f "$LOG_FILE" ]; then
+      tail -n 80 "$LOG_FILE" || true
+    fi
+    if command -v ss >/dev/null 2>&1; then
+      log "Port check (ss):"
+      ss -lntp 2>/dev/null | grep ":$APP_PORT " || true
+    elif command -v lsof >/dev/null 2>&1; then
+      log "Port check (lsof):"
+      lsof -iTCP:"$APP_PORT" -sTCP:LISTEN || true
+    fi
     fail "Failed to start process in nohup mode. Check log: $LOG_FILE"
   fi
   log "Started PID: $new_pid"

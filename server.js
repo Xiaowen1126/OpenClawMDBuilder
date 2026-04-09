@@ -118,7 +118,6 @@ async function restoreBackup(id) {
   const dir = path.join(BACKUP_DIR, id);
   if (!ensureInDir(BACKUP_DIR, dir) || !fssync.existsSync(dir)) throw new Error("backup not found");
 
-  await createBackup(`pre-restore:${id}`);
   const files = (await fs.readdir(dir)).filter((f) => /\.md$/i.test(f));
   for (const file of files) {
     const src = path.join(dir, file);
@@ -126,6 +125,12 @@ async function restoreBackup(id) {
     await fs.copyFile(src, dst);
   }
   return { restoredBackupId: id, fileCount: files.length };
+}
+async function deleteBackup(id) {
+  const dir = path.join(BACKUP_DIR, id);
+  if (!ensureInDir(BACKUP_DIR, dir) || !fssync.existsSync(dir)) throw new Error("backup not found");
+  await fs.rm(dir, { recursive: true, force: false });
+  return { deletedBackupId: id };
 }
 
 app.get("/api/health", async (_req, res) => {
@@ -215,6 +220,18 @@ app.post("/api/workspace/backups/:id/restore", async (req, res) => {
     const id = path.basename(String(req.params.id || ""));
     if (!/^[0-9]{8}-[0-9]{6}$/.test(id)) return res.status(400).json({ message: "invalid backup id" });
     const result = await restoreBackup(id);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ message: String(err.message || err) });
+  }
+});
+
+app.delete("/api/workspace/backups/:id", async (req, res) => {
+  try {
+    await ensureDirs();
+    const id = path.basename(String(req.params.id || ""));
+    if (!/^[0-9]{8}-[0-9]{6}$/.test(id)) return res.status(400).json({ message: "invalid backup id" });
+    const result = await deleteBackup(id);
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ message: String(err.message || err) });
