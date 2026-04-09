@@ -22,6 +22,9 @@ APP_PORT="${APP_PORT:-8787}"
 OPENCLAW_WORKSPACE="${OPENCLAW_WORKSPACE:-$HOME/.openclaw/workspace}"
 SERVICE_NAME="${SERVICE_NAME:-openclaw-md-builder}"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+RUNTIME_DIR="${APP_DIR}/.runtime"
+PID_FILE="${RUNTIME_DIR}/${SERVICE_NAME}.pid"
+LOG_FILE="${RUNTIME_DIR}/${SERVICE_NAME}.log"
 
 log() { echo "[bootstrap] $*"; }
 fail() { echo "[bootstrap] ERROR: $*" >&2; exit 1; }
@@ -140,15 +143,61 @@ enable_and_start() {
   sudo_if_needed systemctl --no-pager --full status "$SERVICE_NAME" || true
 }
 
+has_systemd() {
+  command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]
+}
+
+start_without_systemd() {
+  local node_path
+  node_path="$(command -v node)"
+  [ -n "$node_path" ] || fail "node executable not found in PATH"
+
+  mkdir -p "$RUNTIME_DIR"
+
+  if [ -f "$PID_FILE" ]; then
+    local old_pid
+    old_pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if [ -n "${old_pid:-}" ] && kill -0 "$old_pid" >/dev/null 2>&1; then
+      log "Stopping existing process: $old_pid"
+      kill "$old_pid" || true
+      sleep 1
+    fi
+  fi
+
+  log "systemd not available. Starting with nohup fallback..."
+  (
+    cd "$APP_DIR"
+    nohup env PORT="$APP_PORT" OPENCLAW_WORKSPACE="$OPENCLAW_WORKSPACE" "$node_path" "$APP_DIR/server.js" >>"$LOG_FILE" 2>&1 &
+    echo $! >"$PID_FILE"
+  )
+
+  sleep 1
+  local new_pid
+  new_pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  if [ -z "${new_pid:-}" ] || ! kill -0 "$new_pid" >/dev/null 2>&1; then
+    fail "Failed to start process in nohup mode. Check log: $LOG_FILE"
+  fi
+  log "Started PID: $new_pid"
+}
+
 main() {
   need_cmd bash
   install_node_if_missing
   install_dependencies
-  write_systemd_service
-  enable_and_start
+  if has_systemd; then
+    write_systemd_service
+    enable_and_start
+  else
+    start_without_systemd
+  fi
   log "Done."
   log "App URL: http://127.0.0.1:${APP_PORT}"
-  log "Service logs: sudo journalctl -u ${SERVICE_NAME} -f"
+  if has_systemd; then
+    log "Service logs: sudo journalctl -u ${SERVICE_NAME} -f"
+  else
+    log "Process log: tail -f ${LOG_FILE}"
+    log "Stop command: kill \$(cat ${PID_FILE})"
+  fi
 }
 
 main "$@"

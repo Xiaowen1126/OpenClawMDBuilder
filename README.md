@@ -115,7 +115,8 @@ chmod +x ./bootstrap-linux.sh
 
 - 安装 Node.js 18+（若未安装）
 - 安装 npm 依赖
-- 创建并启动 systemd 服务 `openclaw-md-builder`
+- 若存在 systemd：创建并启动 systemd 服务 `openclaw-md-builder`
+- 若不存在 systemd（如容器）：自动使用 `nohup` 后台启动
 
 可选环境变量：
 
